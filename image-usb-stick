@@ -164,6 +164,74 @@ class OsxDiskManager (DiskManager):
 		return None
 
 # ------------------------------------------------------------------------
+# udevadm Disk implementation
+# ------------------------------------------------------------------------
+
+class UdevDevice:
+	def __init__ (self):
+		self.path = None
+		self.name = None
+		self.symlinks = []
+		self.properties = {}
+
+class UdevDeviceManager:
+	def __init__ (self):
+		self.devices = []
+		device = None
+		for line in sh ('/sbin/udevadm info --export-db'):
+			try:
+				key, value = line.split (':', 1)
+			except:
+				continue
+			value = value.strip ()
+			if key == 'P':
+				if device:
+					self.devices.append (device)
+				device = UdevDevice ()
+				device.path = value
+			elif not device:
+				continue
+			elif key == 'N':
+				device.name = value
+			elif key == 'S':
+				device.symlinks.append (value)
+			elif key == 'E':
+				key, value = value.split ('=', 1)
+				device.properties[key.strip ()] = value.strip ()
+		if device:
+			self.devices.append (device)
+
+	def query_by_properties (self, *matches):
+		for dev in self.devices:
+			match = True
+			for match in matches:
+				if isinstance (match, str):
+					if match not in dev.properties:
+						match = False
+						break
+				elif isinstance (match, (list, tuple)):
+					k, v = match[:2]
+					if k not in dev.properties or not dev.properties[k] == v:
+						match = False
+						break
+			if match:
+				yield dev
+
+udev = UdevDeviceManager ()
+for dev in udev.query_by_properties (
+	['ID_BUS', 'usb'],
+	['ID_TYPE', 'disk'],
+	['DEVTYPE', 'disk']):
+	print dev.name
+	for child in udev.query_by_properties (
+		['ID_BUS', 'usb'],
+		['ID_TYPE', 'disk'],
+		['DEVTYPE', 'partition'],
+		['ID_SERIAL', dev.properties['ID_SERIAL']]):
+		print '  %s' % child.name
+sys.exit (1)
+
+# ------------------------------------------------------------------------
 # Tool utilities
 # ------------------------------------------------------------------------
 
