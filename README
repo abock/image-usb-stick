@@ -1,0 +1,16 @@
+image-usb-stick is a command line tool that safely images USB devices
+
+It supports OS X and Linux currently. Without options, the tool runs in an
+interactive mode. The tool will also only allow imaging of actual external
+USB storage devices, preventing accidental data loss on internal devices,
+a problem often encountered when using lower level tools like dd.
+
+The tool will also offer to unmount any mounted partitions on the target
+device.
+
+During the imaging process, useful feedback is presented to the user:
+
+  - Percentage complete
+  - Elapsed time
+  - A visual progress bar
+  - Estimated time remaining
