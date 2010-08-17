@@ -208,7 +208,8 @@ def image (in_path, out_path, progress_cb = None):
 				progress = int ((bytes_read / float (file_size)) * 100)
 
 				current_time = time ()
-				if progress_cb and (last_raise_time == 0 or current_time - last_raise_time > 1):
+				if progress_cb and (r < buf_size or \
+					last_raise_time == 0 or current_time - last_raise_time > 1):
 					last_raise_time = current_time
 					progress_cb (progress, start_time, bytes_read, file_size)
 				
