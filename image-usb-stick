@@ -84,7 +84,15 @@ class Disk:
 class DiskManager:
 	@staticmethod
 	def get_manager ():
-		return OsxDiskManager ()
+		import types
+		for name, type in globals ().iteritems ():
+			if isinstance (type, types.ClassType) and \
+				issubclass (type, DiskManager) and \
+				not type == DiskManager:
+				try:
+					return type ()
+				except:
+					pass
 
 	def get_devices (self):
 		return
@@ -150,6 +158,12 @@ class OsxDisk (Disk):
 		return os.waitpid (proc.pid, 0)[1] == 0	
 
 class OsxDiskManager (DiskManager):
+	def __init__ (self):
+		if not os.path.isdir ('/Volumes') or \
+			not os.path.isdir ('/System') or \
+			not os.path.isfile ('/usr/sbin/diskutil'):
+			raise Exception ()
+
 	def get_devices (self):
 		for node in sh ('diskutil list'):
 			device = self.get_device (node)
@@ -158,10 +172,12 @@ class OsxDiskManager (DiskManager):
 
 	def get_device (self, node):
 		if node.startswith ('/dev/'):
-			disk = OsxDisk (node)
-			if disk.is_valid ():
-				return disk
-		return None
+			try:
+				disk = OsxDisk (node)
+				if disk.is_valid ():
+					return disk
+			except:
+				pass
 
 # ------------------------------------------------------------------------
 # udevadm Disk implementation
@@ -178,7 +194,7 @@ class UdevDeviceManager:
 	def __init__ (self):
 		self.devices = []
 		device = None
-		for line in sh ('/sbin/udevadm info --export-db'):
+		for line in sh ('/sbin/udevadm info --root --export-db'):
 			try:
 				key, value = line.split (':', 1)
 			except:
@@ -217,19 +233,79 @@ class UdevDeviceManager:
 			if match:
 				yield dev
 
-udev = UdevDeviceManager ()
-for dev in udev.query_by_properties (
-	['ID_BUS', 'usb'],
-	['ID_TYPE', 'disk'],
-	['DEVTYPE', 'disk']):
-	print dev.name
-	for child in udev.query_by_properties (
-		['ID_BUS', 'usb'],
-		['ID_TYPE', 'disk'],
-		['DEVTYPE', 'partition'],
-		['ID_SERIAL', dev.properties['ID_SERIAL']]):
-		print '  %s' % child.name
-sys.exit (1)
+class UdevDisk (Disk):
+	def __init__ (self, udev_device, udev_manager):
+		Disk.__init__ (self)
+		self.device_node = udev_device.properties['DEVNAME']
+		if not self.device_node[0] == '/':
+			self.device_node = '/dev/%s' % self.device_node
+
+		self.name = udev_device.properties['ID_MODEL']
+
+		try:
+			with open ('/sys/class/block/%s/size' % \
+				os.path.basename (self.device_node), 'r') as fp:
+				self.size = int (fp.read ()) * 512
+		except:
+			pass
+
+		try:
+			self.mount_point = udev_manager.mounts[self.device_node]
+			self.is_mounted = not self.mount_point == None
+			print self.mount_point
+		except:
+			pass
+
+		if not udev_device.properties['DEVTYPE'] == 'disk':
+			return
+
+		for child in udev_manager.query_by_properties (
+			['ID_BUS', 'usb'],
+			['ID_TYPE', 'disk'],
+			['DEVTYPE', 'partition'],
+			['ID_SERIAL', udev_device.properties['ID_SERIAL']]):
+			try:
+				child_disk = UdevDisk (child, udev_manager)
+				if child_disk.is_valid ():
+					self.children.append (child_disk)
+			except:
+				pass
+
+	def is_valid (self):
+		return Disk.is_valid (self) and os.path.exists (self.device_node)
+
+	def unmount (self):
+		import subprocess
+		proc = subprocess.Popen ('/bin/umount %s' % self.device_node, shell = True)
+		return os.waitpid (proc.pid, 0)[1] == 0
+
+class UdevDiskMianager (DiskManager, UdevDeviceManager):
+	def __init__ (self):
+		UdevDeviceManager.__init__ (self)
+		if not os.path.isdir ('/sys') or \
+			not os.path.isfile ('/sbin/udevadm'):
+			raise Exception ()
+
+		self.mounts = {}
+		try:
+			for line in sh ('/bin/mount'):
+				parts = line.split ()
+				if len (parts) >= 3 and parts[1] == 'on':
+					self.mounts[parts[0]] = parts[2]
+		except:
+			pass
+
+	def get_devices (self):
+		for dev in self.query_by_properties (
+			['ID_BUS', 'usb'],
+			['ID_TYPE', 'disk'],
+			['DEVTYPE', 'disk']):
+			try:
+				disk = UdevDisk (dev, self)
+				if disk.is_valid ():
+					yield disk
+			except:
+				pass
 
 # ------------------------------------------------------------------------
 # Tool utilities
@@ -366,7 +442,7 @@ if __name__ == '__main__':
 			print '  %d) %s' % (i + 1, devices[i])
 			for child in devices[i].children:
 				print '     - %s' % child
-		print
+			print
 		def select (i):
 			if i >= 1 and i <= len (devices):
 				return devices[i - 1]
