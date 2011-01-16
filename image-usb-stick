@@ -192,6 +192,10 @@ class UdevDevice:
 
 class UdevDeviceManager:
 	def __init__ (self):
+		if not os.path.isdir ('/sys') or \
+			not os.path.isfile ('/sbin/udevadm'):
+			raise Exception ()
+
 		self.devices = []
 		device = None
 		for line in sh ('/sbin/udevadm info --root --export-db'):
@@ -282,9 +286,6 @@ class UdevDisk (Disk):
 class UdevDiskMianager (DiskManager, UdevDeviceManager):
 	def __init__ (self):
 		UdevDeviceManager.__init__ (self)
-		if not os.path.isdir ('/sys') or \
-			not os.path.isfile ('/sbin/udevadm'):
-			raise Exception ()
 
 		self.mounts = {}
 		try:
@@ -425,6 +426,9 @@ if __name__ == '__main__':
 	manager = DiskManager.get_manager ()
 	devices = [d for d in manager.get_devices ()]
 	target_device = None
+
+	if len (devices) == 0:
+		sys.exit ('No devices found.')
 
 	print
 
