@@ -149,8 +149,7 @@ class OsxDisk (Disk):
 			self.attrs['protocol'] == 'USB' and \
 			self.attrs['read_only_media'] == 'No' and \
 			self.attrs['ejectable'] == 'Yes' and \
-			self.attrs['whole'] == 'Yes' and \
-			self.attrs['internal'] == 'No'
+			self.attrs['whole'] == 'Yes'
 
 	def unmount (self):
 		import subprocess
