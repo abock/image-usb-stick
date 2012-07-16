@@ -115,6 +115,10 @@ class OsxDisk (Disk):
 					self.attrs[make_id (parts[0])] = val
 		
 		self.device_node = self.attrs['device_node']
+
+		if self.device_node.startswith("/dev/disk"):
+			self.device_node = self.device_node.replace("/dev/disk", "/dev/rdisk")
+
 		self.is_mounted = 'mounted' in self.attrs and self.attrs['mounted'] == 'Yes'
 		self.name = self.attrs['device_media_name']
 		
